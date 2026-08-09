@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grammar Check</title>
+<style>
+:root {
+  --bg: #f8f9fa;
+  --surface: #fff;
+  --border: #dee2e6;
+  --text: #212529;
+  --text-secondary: #6c757d;
+  --grammar: #dc3545;
+  --grammar-bg: #fff5f5;
+  --style: #fd7e14;
+  --style-bg: #fff8f0;
+  --spelling: #e8590c;
+  --spelling-bg: #fff4e6;
+  --typo: #7950f2;
+  --typo-bg: #f8f0ff;
+  --accent: #228be6;
+  --accent-hover: #1c7ed6;
+  --radius: 8px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh;
+}
+header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 10;
+}
+.logo { font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+.logo svg { width: 22px; height: 22px; }
+.lang-select {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; background: var(--surface); color: var(--text); cursor: pointer;
+}
+.container { max-width: 860px; margin: 0 auto; padding: 32px 20px; }
+textarea {
+  width: 100%; min-height: 180px; padding: 16px; border: 1px solid var(--border);
+  border-radius: var(--radius); font-size: 15px; font-family: inherit; line-height: 1.7;
+  resize: vertical; background: var(--surface); color: var(--text);
+}
+textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,139,230,.12); }
+.input-bar { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; }
+.char-count { font-size: 13px; color: var(--text-secondary); }
+.btn {
+  padding: 9px 20px; border: none; border-radius: 6px; font-size: 14px;
+  font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--bg); }
+
+/* Status line */
+.status { display: none; align-items: center; gap: 8px; padding: 10px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 14px; }
+.status.visible { display: flex; }
+.status.info { background: #e7f5ff; color: #1864ab; border: 1px solid #a5d8ff; }
+.status.error { background: #fff5f5; color: #c92a2a; border: 1px solid #ffc9c9; }
+.status.success { background: #ebfbee; color: #2b8a3e; border: 1px solid #b2f2bb; }
+.spinner-sm {
+  width: 16px; height: 16px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Result */
+.result { display: none; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; line-height: 1.9; font-size: 15px; position: relative; }
+.result.visible { display: block; }
+.result mark {
+  cursor: pointer; padding: 1px 2px; border-radius: 3px; text-decoration: underline; text-decoration-style: wavy; text-underline-offset: 4px;
+}
+mark.grammar { background: var(--grammar-bg); text-decoration-color: var(--grammar); }
+mark.style { background: var(--style-bg); text-decoration-color: var(--style); }
+mark.spelling { background: var(--spelling-bg); text-decoration-color: var(--spelling); }
+mark.typo { background: var(--typo-bg); text-decoration-color: var(--typo); }
+
+/* Popover */
+.popover {
+  display: none; position: absolute; z-index: 20;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; min-width: 220px; max-width: 320px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.15); font-size: 13px; line-height: 1.5;
+}
+.popover.visible { display: block; }
+.popover .msg { font-weight: 600; margin-bottom: 6px; }
+.popover .cat { font-size: 11px; color: var(--text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .4px; }
+.popover ul { list-style: none; }
+.popover li { padding: 6px 10px; border-radius: 4px; cursor: pointer; }
+.popover li:hover { background: var(--bg); }
+.popover .old { text-decoration: line-through; color: var(--text-secondary); margin-right: 6px; }
+.popover .new { font-weight: 600; color: var(--accent); }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #212529; color: #fff; padding: 10px 20px; border-radius: 8px;
+  font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 100;
+}
+.toast.visible { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+    </svg>
+    Grammar Check
+  </div>
+  <select class="lang-select" id="language">
+    <option value="en-US">English (US)</option>
+    <option value="en-GB">English (UK)</option>
+  </select>
+</header>
+
+<div class="container">
+  <textarea id="input" placeholder="Paste your English text here..."></textarea>
+  <div class="input-bar">
+    <span class="char-count" id="charCount">0 characters</span>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+      <button class="btn btn-primary" id="checkBtn" onclick="checkGrammar()">Check Grammar</button>
+    </div>
+  </div>
+
+  <div class="status info" id="status"><span class="spinner-sm"></span> Checking...</div>
+
+  <div class="result" id="result"></div>
+  <div class="popover" id="popover"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// --- CONFIG ---
+// Self-hosted behind nginx:  const API_BASE = '/api';
+// Public API (for testing): const API_BASE = 'https://api.languagetool.org';
+const API_BASE = 'https://api.languagetool.org';
+
+let currentMatches = [];
+let currentText = '';
+
+document.getElementById('input').addEventListener('input', function(e) {
+  document.getElementById('charCount').textContent = e.target.value.length + ' characters';
+});
+
+document.getElementById('input').addEventListener('keydown', function(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); checkGrammar(); }
+});
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('mark') && !e.target.closest('.popover')) {
+    document.getElementById('popover').classList.remove('visible');
+  }
+});
+
+async function checkGrammar() {
+  var input = document.getElementById('input').value.trim();
+  if (!input) return;
+  currentText = input;
+
+  var checkBtn = document.getElementById('checkBtn');
+  var status = document.getElementById('status');
+  var result = document.getElementById('result');
+  var popover = document.getElementById('popover');
+
+  checkBtn.disabled = true;
+  popover.classList.remove('visible');
+  status.className = 'status info visible';
+  status.innerHTML = '<span class="spinner-sm"></span> Checking...';
+  result.classList.remove('visible');
+
+  var lang = document.getElementById('language').value;
+
+  try {
+    var params = new URLSearchParams();
+    params.append('text', input);
+    params.append('language', lang);
+
+    var resp = await fetch(API_BASE + '/v2/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+
+    if (!resp.ok) {
+      throw new Error('Server returned ' + resp.status + ' ' + resp.statusText);
+    }
+
+    var data = await resp.json();
+    currentMatches = data.matches || [];
+    renderResults(input, currentMatches);
+
+    if (currentMatches.length === 0) {
+      status.className = 'status success visible';
+      status.innerHTML = 'No issues found. Text looks great!';
+    } else {
+      status.className = 'status visible';
+      status.style.cssText = '';
+      status.className = '';
+      status.style.display = 'none';
+      status.classList.remove('visible');
+    }
+
+  } catch (err) {
+    status.className = 'status error visible';
+    status.innerHTML = 'Error: ' + err.message + '. Make sure the LanguageTool server is running.';
+    result.innerHTML = '';
+    result.classList.remove('visible');
+    console.error('Grammar check failed:', err);
+  } finally {
+    checkBtn.disabled = false;
+  }
+}
+
+function renderResults(text, matches) {
+  var result = document.getElementById('result');
+
+  if (matches.length === 0) {
+    result.innerHTML = '';
+    result.classList.remove('visible');
+    return;
+  }
+
+  var sorted = matches.slice().sort(function(a, b) { return a.offset - b.offset; });
+  var html = '';
+  var cursor = 0;
+
+  for (var i = 0; i < sorted.length; i++) {
+    var m = sorted[i];
+    if (m.offset > cursor) {
+      html += esc(text.slice(cursor, m.offset));
+    }
+    var cat = (m.rule && m.rule.category && m.rule.category.name || '').toLowerCase();
+    var cssClass = 'grammar';
+    if (cat === 'style' || cat === 'redundancy' || cat === 'plain english') cssClass = 'style';
+    else if (cat === 'typography' || cat === 'punctuation') cssClass = 'typo';
+    else if (cat === 'misspelling' || cat.indexOf('spell') >= 0) cssClass = 'spelling';
+
+    html += '<mark class="' + cssClass + '" data-idx="' + i + '">';
+    html += esc(text.slice(m.offset, m.offset + m.length));
+    html += '</mark>';
+    cursor = m.offset + m.length;
+  }
+  if (cursor < text.length) {
+    html += esc(text.slice(cursor));
+  }
+
+  result.innerHTML = html;
+  result.classList.add('visible');
+
+  var marks = result.querySelectorAll('mark');
+  for (var j = 0; j < marks.length; j++) {
+    marks[j].addEventListener('click', (function(idx, el) {
+      return function(e) { e.stopPropagation(); showPopover(idx, el); };
+    })(j, marks[j]));
+  }
+}
+
+function showPopover(idx, el) {
+  var m = currentMatches[idx];
+  if (!m) return;
+
+  var popover = document.getElementById('popover');
+
+  var sugHtml = '';
+  if (m.replacements && m.replacements.length > 0) {
+    sugHtml = '<ul>';
+    for (var i = 0; i < m.replacements.length && i < 5; i++) {
+      sugHtml += '<li onclick="applyFix(' + idx + ',' + i + ')"><span class="new">' + esc(m.replacements[i].value) + '</span></li>';
+    }
+    sugHtml += '</ul>';
+  }
+
+  var catLabel = m.rule && m.rule.category ? m.rule.category.name : 'Grammar';
+  popover.innerHTML =
+    '<div class="msg">' + esc(m.message) + '</div>' +
+    '<div class="cat">' + esc(catLabel) + (m.rule ? ' · ' + esc(m.rule.id) : '') + '</div>' +
+    sugHtml;
+
+  var rect = el.getBoundingClientRect();
+  var top = rect.bottom + window.scrollY + 4;
+  var left = rect.left + window.scrollX;
+  if (left + 320 > window.innerWidth) left = window.innerWidth - 340;
+
+  popover.style.top = top + 'px';
+  popover.style.left = left + 'px';
+  popover.classList.add('visible');
+}
+
+function applyFix(idx, replIdx) {
+  var m = currentMatches[idx];
+  if (!m || !m.replacements || !m.replacements[replIdx]) return;
+
+  var textarea = document.getElementById('input');
+  var text = textarea.value;
+  var replacement = m.replacements[replIdx].value;
+  var original = text.slice(m.offset, m.offset + m.length);
+
+  textarea.value = text.slice(0, m.offset) + replacement + text.slice(m.offset + m.length);
+  document.getElementById('charCount').textContent = textarea.value.length + ' characters';
+  document.getElementById('popover').classList.remove('visible');
+
+  checkGrammar();
+  showToast('"' + original + '" → "' + replacement + '"');
+}
+
+function clearAll() {
+  document.getElementById('input').value = '';
+  document.getElementById('charCount').textContent = '0 characters';
+  document.getElementById('result').classList.remove('visible');
+  document.getElementById('result').innerHTML = '';
+  document.getElementById('status').classList.remove('visible');
+  document.getElementById('popover').classList.remove('visible');
+  currentMatches = [];
+  document.getElementById('input').focus();
+}
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  setTimeout(function() { t.classList.remove('visible'); }, 2000);
+}
+</script>
+</body>
+</html>
